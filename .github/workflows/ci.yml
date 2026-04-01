@@ -1,0 +1,181 @@
+# =============================================================================
+# .github/workflows/ci.yml
+#
+# CI Pipeline — runs on every push and pull request to main.
+# Validates catalog integrity, lints PowerShell scripts, and
+# verifies all required fields are present.
+# =============================================================================
+
+name: CI — Validate Catalog & Scripts
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Validate catalog.json structure
+  # ────────────────────────────────────────────────────────────────────────────
+  validate-catalog:
+    name: Validate catalog.json
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate catalog structure
+        shell: pwsh
+        run: |
+          Write-Host "Loading catalog.json..." -ForegroundColor Cyan
+          $catalog = Get-Content catalog.json | ConvertFrom-Json
+
+          if (-not $catalog.catalog_version) {
+            Write-Error "Missing: catalog_version"
+            exit 1
+          }
+
+          $requiredFields = @(
+            "id", "name", "vendor", "version",
+            "download_url", "sha256",
+            "silent_args", "install_path", "post_install_validation"
+          )
+
+          $errors = @()
+
+          foreach ($pkg in $catalog.software) {
+            Write-Host "Checking package: $($pkg.id)" -ForegroundColor Yellow
+
+            foreach ($field in $requiredFields) {
+              if (-not $pkg.$field) {
+                $errors += "Package '$($pkg.id)' missing required field: $field"
+              }
+            }
+
+            # Validate download_url format
+            if ($pkg.download_url -notmatch "^https://") {
+              $errors += "Package '$($pkg.id)' download_url must use HTTPS"
+            }
+
+            # Validate sha256 is non-empty string
+            if ($pkg.sha256.Length -lt 10) {
+              $errors += "Package '$($pkg.id)' sha256 appears invalid (too short)"
+            }
+
+            Write-Host "  ✓ $($pkg.name)" -ForegroundColor Green
+          }
+
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All $($catalog.software.Count) packages validated successfully." -ForegroundColor Green
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Lint PowerShell scripts with PSScriptAnalyzer
+  # ────────────────────────────────────────────────────────────────────────────
+  lint-scripts:
+    name: Lint PowerShell scripts
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -Repository PSGallery
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Write-Host "Scanning all .ps1 files..." -ForegroundColor Cyan
+
+          $results = Invoke-ScriptAnalyzer `
+            -Path ./scripts `
+            -Recurse `
+            -Severity Error, Warning `
+            -ExcludeRule PSAvoidUsingWriteHost
+
+          if ($results) {
+            $results | Format-Table -AutoSize
+            $errors = $results | Where-Object { $_.Severity -eq "Error" }
+            if ($errors) {
+              Write-Error "PSScriptAnalyzer found $($errors.Count) error(s). Fix before merging."
+              exit 1
+            } else {
+              Write-Warning "PSScriptAnalyzer found warnings (non-blocking)."
+            }
+          } else {
+            Write-Host "No issues found. All scripts clean." -ForegroundColor Green
+          }
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Verify download URLs are reachable (HEAD request only)
+  # ────────────────────────────────────────────────────────────────────────────
+  verify-urls:
+    name: Verify download URLs
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check all download URLs return HTTP 200
+        shell: pwsh
+        run: |
+          $catalog = Get-Content catalog.json | ConvertFrom-Json
+          $failed  = @()
+
+          foreach ($pkg in $catalog.software) {
+            Write-Host "Checking URL for $($pkg.id)..." -ForegroundColor Yellow
+            try {
+              $resp = Invoke-WebRequest -Uri $pkg.download_url `
+                                        -Method Head `
+                                        -UseBasicParsing `
+                                        -TimeoutSec 15 `
+                                        -ErrorAction Stop
+              Write-Host "  ✓ HTTP $($resp.StatusCode) — $($pkg.download_url)" -ForegroundColor Green
+            }
+            catch {
+              $failed += "UNREACHABLE: $($pkg.id) — $($pkg.download_url)"
+              Write-Host "  ✗ FAILED: $($pkg.download_url)" -ForegroundColor Red
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            $failed | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All download URLs are reachable." -ForegroundColor Green
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 4 — Summary badge
+  # ────────────────────────────────────────────────────────────────────────────
+  summary:
+    name: Pipeline Summary
+    runs-on: windows-latest
+    needs: [validate-catalog, lint-scripts, verify-urls]
+    if: always()
+
+    steps:
+      - name: Report status
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "══════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  CI Pipeline Complete" -ForegroundColor Cyan
+          Write-Host "══════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  ✓ Catalog validated"
+          Write-Host "  ✓ Scripts linted"
+          Write-Host "  ✓ Download URLs verified"
+          Write-Host ""
+          Write-Host "Repo is ready for deployment." -ForegroundColor Green

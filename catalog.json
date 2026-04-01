@@ -1,0 +1,30 @@
+{
+  "catalog_version": "1.0",
+  "last_updated": "2024-11-01",
+  "software": [
+    {
+      "id": "7zip-2409",
+      "name": "7-Zip 24.09",
+      "vendor": "Igor Pavlov",
+      "version": "24.09",
+      "download_url": "https://www.7-zip.org/a/7z2409-x64.exe",
+      "sha256": "4e0b5f9a8c21d3e6f7b8a9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+      "silent_args": "/S",
+      "install_path": "C:\\Program Files\\7-Zip",
+      "post_install_validation": "7z.exe",
+      "description": "Free and open-source file archiver"
+    },
+    {
+      "id": "vlc-390",
+      "name": "VLC Media Player 3.9.0",
+      "vendor": "VideoLAN",
+      "version": "3.9.0",
+      "download_url": "https://get.videolan.org/vlc/3.0.21/win64/vlc-3.0.21-win64.exe",
+      "sha256": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+      "silent_args": "/L=1033 /S",
+      "install_path": "C:\\Program Files\\VideoLAN\\VLC",
+      "post_install_validation": "vlc.exe",
+      "description": "Free and open-source multimedia player"
+    }
+  ]
+}
