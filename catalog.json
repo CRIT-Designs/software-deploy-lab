@@ -8,7 +8,7 @@
       "vendor": "Igor Pavlov",
       "version": "24.09",
       "download_url": "https://www.7-zip.org/a/7z2409-x64.exe",
-      "sha256": "4e0b5f9a8c21d3e6f7b8a9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+      "sha256": "bdd1a33de78618d16ee4ce148b849932c05d0015491c34887846d431d29f308e",
       "silent_args": "/S",
       "install_path": "C:\\Program Files\\7-Zip",
       "post_install_validation": "7z.exe",

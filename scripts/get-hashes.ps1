@@ -1,10 +1,8 @@
 # =============================================================================
 # get-hashes.ps1
 #
-# Run this ONCE after cloning the repo to:
-#   1. Download each installer to a temp folder
-#   2. Compute real SHA-256 hashes
-#   3. Print the exact values to paste into catalog.json
+# Downloads each installer and computes its real SHA-256 hash.
+# Paste the output values into catalog.json.
 #
 # Usage:
 #   .\scripts\get-hashes.ps1
@@ -21,9 +19,9 @@ New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
 $catalog = Get-Content $CatalogPath | ConvertFrom-Json
 
 Write-Host ""
-Write-Host "  SHA-256 Hash Generator for catalog.json" -ForegroundColor Cyan
-Write-Host "  ────────────────────────────────────────────────────" -ForegroundColor DarkGray
-Write-Host "  This will download each installer and compute its hash."
+Write-Host "  SHA-256 Hash Generator" -ForegroundColor Cyan
+Write-Host "  -----------------------------------------------" -ForegroundColor DarkGray
+Write-Host "  Downloads each installer and computes its hash."
 Write-Host "  Paste the results into catalog.json sha256 fields."
 Write-Host ""
 
@@ -33,27 +31,33 @@ foreach ($pkg in $catalog.software) {
     $fileName = $pkg.download_url.Split("/")[-1]
     $outPath  = Join-Path $TempDir $fileName
 
-    Write-Host "  Downloading from: $($pkg.download_url)" -ForegroundColor DarkGray
+    Write-Host "  Downloading: $($pkg.download_url)" -ForegroundColor DarkGray
 
     try {
-        Start-BitsTransfer -Source $pkg.download_url -Destination $outPath `
-                           -DisplayName "Downloading $($pkg.name)" -Priority Foreground
-    } catch {
-        Invoke-WebRequest -Uri $pkg.download_url -OutFile $outPath -UseBasicParsing
+        $bitsAvailable = Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue
+        if ($bitsAvailable) {
+            Start-BitsTransfer -Source $pkg.download_url -Destination $outPath `
+                               -DisplayName "Downloading $($pkg.name)" -Priority Foreground
+        } else {
+            Invoke-WebRequest -Uri $pkg.download_url -OutFile $outPath -UseBasicParsing
+        }
+    }
+    catch {
+        Write-Host "  ERROR downloading $($pkg.id): $_" -ForegroundColor Red
+        continue
     }
 
     $hash = (Get-FileHash $outPath -Algorithm SHA256).Hash.ToLower()
 
     Write-Host ""
-    Write-Host "  Package ID : $($pkg.id)" -ForegroundColor White
-    Write-Host "  SHA-256    : $hash" -ForegroundColor Green
+    Write-Host "  Package ID : $($pkg.id)"    -ForegroundColor White
+    Write-Host "  SHA-256    : $hash"          -ForegroundColor Green
     Write-Host ""
-    Write-Host "  Paste this into catalog.json:" -ForegroundColor DarkGray
-    Write-Host "  `"sha256`": `"$hash`"" -ForegroundColor Cyan
-    Write-Host "  ────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host "  Paste into catalog.json:"    -ForegroundColor DarkGray
+    Write-Host "  ""sha256"": ""$hash"""        -ForegroundColor Cyan
+    Write-Host "  -----------------------------------------------" -ForegroundColor DarkGray
     Write-Host ""
 
-    # Clean up
     Remove-Item $outPath -Force -ErrorAction SilentlyContinue
 }
 
